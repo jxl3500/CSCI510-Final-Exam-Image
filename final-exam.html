@@ -1,0 +1,202 @@
+<html>
+<head>
+    <title>CSCI-510: Final Exam Prac - Universal & Minions </title>
+
+    <!-- vertex Shader -->
+    <script id="sphereMap-V"  type="x-shader/x-vertex">
+    #version 300 es
+    precision mediump float;
+    // Vertex shader for phong illumination model
+    // Per vertex shading
+
+    // Vertex Attributes
+    in vec3 aVertexPosition; // in model coords
+    in vec2 aUV;    // u-v coordinates
+
+    // outputs
+    out vec2 theUV;  // pass uv's onto the fragment shader
+
+    // for object rotation
+    uniform vec3 theta;
+    uniform mat4 rx;
+    uniform mat4 ry;
+    uniform mat4 rz;
+
+
+    void main()
+    {
+        // Compute the sines and cosines of each rotation
+        // about each axis
+        vec3 angles = radians( theta );
+        vec3 c = cos( angles );
+        vec3 s = sin( angles );
+
+        // rotation matrices
+        mat4 translate1 = mat4(1.0, 0.0, 0.0, -0.5,
+					  0.0, 1.0, 0.0, -0.25,
+					  0.0, 0.0, 1.0, 0.0,
+					  0.0, 0.0, 0.0, 1.0);
+
+        mat4 rx = mat4 ( 1.0,  0.0,  0.0,  0.0,
+                         0.0,  c.x,  s.x,  0.0,
+                         0.0, -s.x,  c.x,  0.0,
+                         0.0,  0.0,  0.0,  1.0 );
+
+        mat4 ry = mat4 ( c.y,  0.0, -s.y,  0.0,
+                         0.0,  1.0,  0.0,  0.0,
+                         s.y,  0.0,  c.y,  0.0,
+                         0.0,  0.0,  0.0,  1.0 );
+
+        mat4 rz = mat4 ( c.z,  s.z,  0.0,  0.0,
+                         -s.z,  c.z,  0.0,  0.0,
+                         0.0,  0.0,  1.0,  0.0,
+                         0.0,  0.0,  0.0,  1.0 );
+
+        // pass uvs to fragment shader
+        theUV = aUV;
+
+        // transform vertex to clip space
+        //gl_Position = rz * ry * rx * vec4 (aVertexPosition, 1.0);
+        gl_Position =  rz  * ry  * rx * vec4 (aVertexPosition, 1);
+    }
+
+    </script>
+
+
+
+    <!-- fragment Shader -->
+    <script id="sphereMap-F" type="x-shader/x-fragment">
+         #version 300 es
+
+         // Fragment shader for phong illumination model
+         // Per vertex shading
+
+         precision lowp float;
+
+         // uvs passed in from vertex shader
+         in vec2 theUV;
+
+         // the texture to use
+         uniform sampler2D theTexture;
+         uniform sampler2D theTexture1;
+
+         // Color that is the result of this shader
+         out vec4 fragColor;
+
+         void main(void) {
+             //vec4 color0 = texture (theTexture, theUV);
+             //vec4 color1 = texture (theTexture1, theUV);
+             //fragColor = color0 * color1;
+             fragColor = texture (theTexture, theUV);
+         }
+
+    </script>
+
+
+    <!-- Matrix library and code for standard transformations -->
+    <script type="text/javascript" src="gl-matrix-min.js"></script>
+
+    <!-- include the shape creation functions -->
+    <script type="text/javascript" src="cgIShape.js"></script>
+
+    <!-- definition of standard shapes -->
+    <script type="text/javascript" src="myShapes-min.js"></script>
+
+    <!-- include the main tesselation functions -->
+    <script type="text/javascript" src="finalMain.js"></script>
+
+    <!-- texture images -->
+    <img id="world-texture" src="globe03.png" style="display: none;"> </img>
+
+    <!-- keyboard functions -->
+    <script type="text/javascript">
+        function gotKey (event) {
+
+            var key = event.key;
+
+            //  change object type
+            if (key == 's') {
+                nowShowing = 'Sphere';
+                angles = sphere_angles;
+            }
+            if (key == 'w') {
+                nowShowing = 'Word';
+                angles = sphere_angles;
+            }
+            if (key == 'm') {
+                nowShowing = 'Minion';
+                angles = sphere_angles;
+            }
+
+            // change texture
+            if (key == '1') curTexture = 'globe';
+            if (key == '2') curTexture = 'myimage';
+            if (key == '3') curTexture = 'proc';
+
+            //  incremental rotation
+            if (key == 'x') angles[0] -= angleInc;
+            if (key == 'y') angles[1] -= angleInc;
+            if (key == 'z') angles[2] -= angleInc;
+            if (key == 'X') angles[0] += angleInc;
+            if (key == 'Y') angles[1] += angleInc;
+            if (key == 'Z') angles[2] += angleInc;
+
+            draw();
+        }
+    </script>
+
+    <script type="text/javascript">
+        // Call init once the webpage has loaded
+        window.onload = init;
+    </script>
+</head>
+
+<body>
+<h1>CSCI-510: Final Exam Image</h1>
+<p style="color:white; position: relative; top: 330px; left: 80px; font-size:45px;">U N I V E R S A L</p>
+
+<br />
+<table>
+    <tr>
+        <td><canvas id="webgl-canvas" width="500" height="500">
+            Your browser does not support the HTML5 canvas element.
+        </canvas></td>
+
+        <td>
+            <h3>Controls</h3>
+
+            <table border="1">
+                <tbody>
+                <tr>
+                    <td>x, y, z</td>
+                    <td>Rotate the current shape forward about the x, y, or z axis</td>
+                </tr>
+                <tr>
+                    <td>X, Y, Z</td>
+                    <td>Rotate the current shape backward about the x, y, or z axis</td>
+                </tr>
+                <tr>
+                    <td>c</td>
+                    <td>Select the cube as the current shape</td>
+                </tr>
+                <tr>
+                    <td>s</td>
+                    <td>Select the sphere as the current shape</td>
+                </tr>
+                </tbody>
+            </table>
+
+        </td>
+    </tr>
+</table>
+
+
+
+
+
+</body>
+</html>
+
+
+
+
