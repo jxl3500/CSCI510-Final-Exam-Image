@@ -4,72 +4,125 @@
 // across the application
 let gl;
 
-// GLSL programs
-let sphereGlobeProgram;
-
+// The programs
+let perVertexProgram;
+let perFragmentProgram;
+let sphereMapProgram;
 
 // VAOs for the objects
+var mySpherePerVertex = null;
+var mySpherePerFragment = null;
 var mySphere = null;
-var myWord = null;
 
-// textures
+// what is currently showing
+let nowShowing = 'Vertex';
 let worldTexture;
-let curTexture = "globe";
-
-// rotation
-var anglesReset = [30.0, 30.0, 0.0];
-var cube_angles = [30.0, 30.0, 0.0];
 var sphere_angles = [180.0, 180.0, 0.0];
 var angles = sphere_angles;
 var angleInc = 5.0;
 
-
-let nowShowing = 'Sphere';
-
 let cur_x = 0;
 
 //
-// create shapes and VAOs for objects.
-// Note that you will need to bindVAO separately for each object / program based
-// upon the vertex attributes found in each program
+// Creates a VAO for a given object and return it.
 //
-function createShapes() {
-    // the sphere
-    mySphere = new Sphere (20,20);
-    mySphere.VAO = bindVAO (mySphere, sphereGlobeProgram);
-    setUpTextures();
-    //
+// shape is the object to be bound
+// program is the program (vertex/fragment shaders) to use in this VAO
+//
+//
+// Note that the program object has member variables that store the
+// location of attributes and uniforms in the shaders.  See the function
+// initProgram for details.
+//
+// You can see the definition of the shaders themselves in the
+// HTML file assn6-shading.html.   Though there are 2 sets of shaders
+// defined (one for per-vertex shading and one for per-fragment shading,
+// each set does have the same list of attributes and uniforms that
+// need to be set
+//
+function bindVAO (shape, program) {
+
+    //create and bind VAO
 
 
-    myWord = new Cube(20);
-    myWord.VAO = bindVAO (myWord, sphereGlobeProgram);
+    // create, bind, and fill buffer for vertex locations
+    // vertex locations can be obtained from the points member of the
+    // shape object.  3 floating point values (x,y,z) per vertex are
+    // stored in this array.
+
+    let theVAO = gl.createVertexArray();
+    gl.bindVertexArray(theVAO)
+
+    let myVertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, myVertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shape.points), gl.STATIC_DRAW);
+
+    gl.enableVertexAttribArray(program.aVertexPosition);
+    gl.vertexAttribPointer(program.aVertexPosition, 3, gl.FLOAT, false, 0, 0);
 
 
+    // create, bind, and fill buffer for normal values
+    // normals can be obtained from the normals member of the
+    // shape object.  3 floating point values (x,y,z) per vertex are
+    // stored in this array.
+    // stored in this array.
+    // console.warn(gl.getUniformLocation(program, 'aNormal'));
+    if (program.aNormal == 1) {
+        let myNormalBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, myNormalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shape.normals), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(program.aNormal);
+        gl.vertexAttribPointer(program.aNormal, 3, gl.FLOAT, false, 0, 0);
+    }
+    // add code for any additional vertex attribute
+    console.warn(gl.getUniformLocation(program, 'aUV'));
+    if (program.aUV == 1) {
+        let uvBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shape.uv), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(program.aUV);
+        gl.vertexAttribPointer(program.aUV, 2, gl.FLOAT, false, 0, 0);
+    }
+    // Setting up element array
+    // element indicies can be obtained from the indicies member of the
+    // shape object.  3 values per triangle are stored in this
+    // array.
+
+    let myIndexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, myIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(shape.indices), gl.STATIC_DRAW);
+
+
+
+
+    // Do cleanup
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+    // return the VAO
+    return theVAO;
 
 }
 
 
 //
-// Here you set up your camera position, orientation, and projection
-// Remember that your projection and view matrices are sent to the vertex shader
-// as uniforms, using whatever name you supply in the shaders
+// In this function, you must set up all of the uniform variables
+// in the shaders required for the implememtation of the Phong
+// Illumination model.
 //
-function setUpCamera(program) {
+// Check out the source of the vertex shader in the HTML file
+// assn6-shading.html taking note of the types of each of the
+// uniforms.
+//
+// Note that the program object has member variables that store the
+// location of attributes and uniforms in the shaders.  See the function
+// initProgram for details.
+//
+//
+//  You should also set up your Model transform here.
 
-    gl.useProgram (program);
-
-    // set up your projection
-    let projMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.ortho(projMatrix, -5, 5, -5, 5, 1.0, 300.0);
-    gl.uniformMatrix4fv (program.uProjT, false, projMatrix);
-
-    // set up your view
-    let viewMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.lookAt(viewMatrix, [0, 0, 5.0], [0, 0, 0], [0, 1, 0]);
-    gl.uniformMatrix4fv (program.uViewT, false, viewMatrix);
-
-}
-function setUpPhong(program) {
+function setUpPhong(program, type) {
 
 
     // Recall that you must set the program to be current using
@@ -93,7 +146,11 @@ function setUpPhong(program) {
 
 
     // object color parameters
-    gl.uniform3fv (program.baseColor, [0.9, 0, 0]);
+    if (type == 'vertex') {
+        gl.uniform3fv(program.baseColor, [0.9, 0, 0]);
+    } else {
+        gl.uniform3fv(program.baseColor, [0.9, 1, 1]);
+    }
 
 
     gl.uniform3fv (program.specHighlightColor, [1, 1, 1]);
@@ -116,150 +173,98 @@ function setUpPhong(program) {
     // Default is no transformations at all (identity matrix).
     //
     let modelMatrix = glMatrix.mat4.create();
-    glMatrix.mat4.scale(modelMatrix, modelMatrix, [1, 1, 1]);
+    if (type == 'vertex') {
+        glMatrix.mat4.scale(modelMatrix, modelMatrix,[3, 3, 3]);
+    } else {
+        glMatrix.mat4.scale(modelMatrix, modelMatrix,[2, 2, 2]);
+    }
     gl.uniformMatrix4fv (program.uModelT, false, modelMatrix);
 
 
 }
 
 //
-// load up the textures you will use in the shader(s)
-// The setup for the globe texture is done for you
-// Any additional images that you include will need to
-// set up as well.
+// set up the view and projections transformations and
+// send to the program (shaders) as uniforms.
 //
-function setUpTextures(){
+// Note that the program object has member variables that store the
+// location of attributes and uniforms in the shaders.  See the function
+// initProgram for details.
+//
+function setUpCamera(program) {
 
-    // flip Y for WebGL
-    gl.pixelStorei (gl.UNPACK_FLIP_Y_WEBGL, true);
+    // Recall you must set the program to be current using the gl
+    // function useProgram.
+    gl.useProgram (program);
 
-    // get some texture space from the gpu
-    worldTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, worldTexture);
 
-    // load the actual image
-    var worldImage = document.getElementById ('world-texture')
-    worldImage.crossOrigin = "";
+    // set up your projection
+    let projMatrix = glMatrix.mat4.create();
+    glMatrix.mat4.ortho(projMatrix, -5, 5, -5, 5, 1.0, 300.0);
+    gl.uniformMatrix4fv (program.uProjT, false, projMatrix);
 
-    // bind the texture so we can perform operations on it
-    gl.bindTexture (gl.TEXTURE_2D, worldTexture);
+    // set up your view
+    let viewMatrix = glMatrix.mat4.create();
+    glMatrix.mat4.lookAt(viewMatrix, [0, 0, 5.0], [0, 0, 0], [0, 1, 0]);
+    gl.uniformMatrix4fv (program.uViewT, false, viewMatrix);
 
-    // load the texture data
-    worldImage.onload = () => {
-        gl.bindTexture(gl.TEXTURE_2D, worldTexture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, worldImage);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        // gl.bindTexture(gl.TEXTURE_2D, null);
-    };
-    worldImage.src = "globe03.png";
-
-    // set texturing parameters
 }
 
+///////////////////////////////////////////////////////////////////
 //
-//  This function draws all of the shapes required for your scene
+//  No need to edit below this line.
 //
-function drawShapes() {
-    // may need to set different parameters based on the texture
-    // you are using...The current texture is found in the global variable
-    // curTexture.   If will have the value of "globe", "myimage" or "proc"
+////////////////////////////////////////////////////////////////////
+
+// general call to make and bind a new object based on current
+// settings..Basically a call to shape specfic calls in cgIshape.js
+function createShapes() {
+
+    //per vertex
+    mySpherePerVertex = new Sphere (20,20);
+    mySpherePerVertex.VAO = bindVAO (mySpherePerVertex, perVertexProgram);
+
+    // per fragment
+    mySpherePerFragment = new Sphere(20, 20);
+    mySpherePerFragment.VAO = bindVAO (mySpherePerFragment, perFragmentProgram);
+
+    mySphere = new Globe (20,20);
+    mySphere.VAO = bindVAO (mySphere, sphereMapProgram);
+    setUpTextures(sphereMapProgram);
+
+}
 
 
-
-    // which program are we using
-    var program = sphereGlobeProgram;
+function drawShapes(object, program) {
 
     // set up your uniform variables for drawing
     gl.useProgram (program);
-    //
-    // set up texture uniform & other uniforms that you might
-    // have added to the shader
+
+    //Bind the VAO and draw
+    gl.bindVertexArray(object.VAO);
+    gl.drawElements(gl.TRIANGLES, object.indices.length, gl.UNSIGNED_SHORT, 0);
+
+}
+
+function drawglobe(object, program) {
+
+    // set up your uniform variables for drawing
+    gl.useProgram (program);
+
     gl.activeTexture (gl.TEXTURE0);
     gl.bindTexture (gl.TEXTURE_2D, worldTexture);
     gl.uniform1i (program.uTheTexture, 0);
 
-
     // set up rotation uniform
     gl.uniform3fv (program.uTheta, new Float32Array(angles));
-
     gl.uniform1i(program.ux, cur_x);
-    // gl.uniformMatrix4fv (program.uModelT, false, modelMatrix);
 
 
     //Bind the VAO and draw
-    gl.bindVertexArray(mySphere.VAO);
-    gl.drawElements(gl.TRIANGLES, mySphere.indices.length, gl.UNSIGNED_SHORT, 0);
-
-    gl.bindVertexArray(myWord.VAO);
-    gl.drawElements(gl.TRIANGLES, myWord.indices.length, gl.UNSIGNED_SHORT, 0);
-
-
+    gl.bindVertexArray(object.VAO);
+    gl.drawElements(gl.TRIANGLES, object.indices.length, gl.UNSIGNED_SHORT, 0);
 
 }
-
-
-//
-// Use this function to create all the programs that you need
-// You can make use of the auxillary function initProgram
-// which takes the name of a vertex shader and fragment shader
-//
-// Note that after successfully obtaining a program using the initProgram
-// function, you will beed to assign locations of attribute and unifirm variable
-// based on the in variables to the shaders.   This will vary from program
-// to program.
-//
-function initPrograms() {
-    sphereGlobeProgram = initProgram('sphereMap-V', 'sphereMap-F');
-    // perVertexProgram = initProgram('phong-per-vertex-V', 'phong-per-vertex-F');
-    // perFragmentProgram = initProgram('phong-per-fragment-V', 'phong-per-fragment-F');
-
-    // wordProgram = initProgram('cubeMap-V', 'cubeMap-F');
-}
-
-
-// creates a VAO and returns its ID
-function bindVAO (shape, program) {
-    //create and bind VAO
-    let theVAO = gl.createVertexArray();
-    gl.bindVertexArray(theVAO);
-
-    // create and bind vertex buffer
-    let myVertexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, myVertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shape.points), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(program.aVertexPosition);
-    gl.vertexAttribPointer(program.aVertexPosition, 3, gl.FLOAT, false, 0, 0);
-
-    // add code for any additional vertex attribute
-    let uvBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shape.uv), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(program.aUV);
-    gl.vertexAttribPointer(program.aUV, 2, gl.FLOAT, false, 0, 0);
-
-
-    // Setting up the IBO
-    let myIndexBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, myIndexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(shape.indices), gl.STATIC_DRAW);
-
-    // Clean
-    gl.bindVertexArray(null);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-    return theVAO;
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
-//
-//  You shouldn't have to edit anything below this line...but you can
-//  if you find the need
-//
-/////////////////////////////////////////////////////////////////////////////
 
 // Given an id, extract the content's of a shader script
 // from the DOM and return the compiled shader
@@ -285,25 +290,18 @@ function getShader(id) {
 
     // Ensure the shader is valid
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(gl.getShaderInfoLog(shader));
+        console.error("Compiling shader " + id + " " + gl.getShaderInfoLog(shader));
         return null;
     }
 
     return shader;
 }
 
-
-//
-// compiles, loads, links and returns a program (vertex/fragment shader pair)
-//
-// takes in the id of the vertex and fragment shaders (as given in the HTML file)
-// and returns a program object.
-//
-// will return null if something went wrong
-//
-function initProgram(vertex_id, fragment_id) {
-    const vertexShader = getShader(vertex_id);
-    const fragmentShader = getShader(fragment_id);
+// Create a program with the appropriate vertex and fragment shaders
+function initProgram (vertexid, fragmentid) {
+    // set up the per-vertex program
+    const vertexShader = getShader(vertexid);
+    const fragmentShader = getShader(fragmentid);
 
     // Create a program
     let program = gl.createProgram();
@@ -315,7 +313,6 @@ function initProgram(vertex_id, fragment_id) {
 
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         console.error('Could not initialize shaders');
-        return null;
     }
 
     // Use this program instance
@@ -323,20 +320,12 @@ function initProgram(vertex_id, fragment_id) {
     // We attach the location of these shader values to the program instance
     // for easy access later in the code
     program.aVertexPosition = gl.getAttribLocation(program, 'aVertexPosition');
-    program.aUV = gl.getAttribLocation(program, 'aUV');
+    program.aNormal = gl.getAttribLocation(program, 'aNormal');
 
-    // uniforms - you will need to add references for any additional
-    // uniforms that you add to your shaders
-    program.uTheTexture = gl.getUniformLocation (program, 'theTexture');
-    program.uTheta = gl.getUniformLocation (program, 'theta');
-    program.aBary = gl.getAttribLocation(program, 'bary');
-    program.urx = gl.getUniformLocation (program, 'rx');
-    program.ury = gl.getUniformLocation (program, 'ry');
-    program.urz = gl.getUniformLocation (program, 'rz');
+    // uniforms
     program.uModelT = gl.getUniformLocation (program, 'modelT');
     program.uViewT = gl.getUniformLocation (program, 'viewT');
     program.uProjT = gl.getUniformLocation (program, 'projT');
-    program.uTrans = gl.getUniformLocation(program, 'translation');
     program.ambientLight = gl.getUniformLocation (program, 'ambientLight');
     program.lightPosition = gl.getUniformLocation (program, 'lightPosition');
     program.lightColor = gl.getUniformLocation (program, 'lightColor');
@@ -346,27 +335,72 @@ function initProgram(vertex_id, fragment_id) {
     program.kd = gl.getUniformLocation (program, 'kd');
     program.ks = gl.getUniformLocation (program, 'ks');
     program.ke = gl.getUniformLocation (program, 'ke');
+    program.uTheTexture = gl.getUniformLocation (program, 'theTexture');
+    program.aUV = gl.getAttribLocation(program, 'aUV');
+    program.uTheta = gl.getUniformLocation (program, 'theta');
     program.ux = gl.getUniformLocation (program, 'cur_x');
+
+
+
 
     return program;
 }
 
+function setUpTextures(program){
+    gl.useProgram(program);
 
-//
+    // flip Y for WebGL
+    gl.pixelStorei (gl.UNPACK_FLIP_Y_WEBGL, true);
+
+    // get some texture space from the gpu
+    worldTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, worldTexture);
+
+    // load the actual image
+    var worldImage = document.getElementById ('world-texture')
+    worldImage.crossOrigin = "";
+
+    // bind the texture so we can perform operations on it
+    gl.bindTexture (gl.TEXTURE_2D, worldTexture);
+
+    // load the texture data
+    worldImage.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, worldTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, worldImage);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    };
+    worldImage.src = "globe03.png";
+
+    // set texturing parameters
+}
+
+
 // We call draw to render to our canvas
-//
 function draw() {
     // Clear the scene
     // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
     // draw your shapes
-    drawShapes();
+    // if (nowShowing == 'Vertex') {
+    var script = document.getElementById('webgl-canvas');
+    script.style.backgroundImage = "url('universe02.png')";
+    drawShapes(mySpherePerVertex, perVertexProgram);
+    // }
+    // if (nowShowing == 'Fragment') {
+    drawShapes(mySpherePerFragment, perFragmentProgram);
+    // }
+
+    drawglobe(mySphere, sphereMapProgram);
 
     // Clean
     gl.bindVertexArray(null);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
 }
 
 // Entry point to our application
@@ -389,9 +423,6 @@ function init() {
         return null;
     }
 
-    // deal with keypress
-    window.addEventListener('keydown', gotKey ,false);
-
     // Set the clear color to be black
     gl.clearColor(0, 0, 0, 1);
 
@@ -405,19 +436,24 @@ function init() {
     gl.depthFunc(gl.LEQUAL)
     gl.clearDepth(1.0)
 
-
-    // deal with keypress
-    window.addEventListener('keydown', gotKey ,false);
-
     // Read, compile, and link your shaders
-    initPrograms();
+    perVertexProgram = initProgram('phong-per-vertex-V', 'phong-per-vertex-F');
+    perFragmentProgram = initProgram('phong-per-fragment-V', 'phong-per-fragment-F');
+    sphereMapProgram = initProgram('sphereMap-V', 'sphereMap-F');
 
     // create and bind your current object
     createShapes();
 
-    setUpCamera(sphereGlobeProgram);
 
-    setUpPhong(sphereGlobeProgram);
+
+
+    // set up your camera
+    setUpCamera(perVertexProgram);
+    setUpCamera(perFragmentProgram);
+
+    // set up Phong parameters
+    setUpPhong(perVertexProgram, 'vertex');
+    setUpPhong(perFragmentProgram, 'fragment');
 
     // do a draw
     draw();
