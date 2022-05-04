@@ -3,15 +3,13 @@
   function gotKey (event) {
 
       var key = event.key;
-
+      console.warn(key);
       //  change object type
-      if (key == 's') {
-          nowShowing = 'Sphere';
-          angles = sphere_angles;
-      }
-      if (key == 'c') {
-          nowShowing = 'Cube';
-          angles = cube_angles;
+
+      if (key == 't') {
+          cur_x = 1;
+      } if (key == 'r') {
+          cur_x = 0;
       }
 
 

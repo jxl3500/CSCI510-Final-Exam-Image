@@ -6,9 +6,7 @@ let gl;
 
 // GLSL programs
 let sphereGlobeProgram;
-let wordProgram;
-let perVertexProgram;
-let perFragmentProgram;
+
 
 // VAOs for the objects
 var mySphere = null;
@@ -27,6 +25,8 @@ var angleInc = 5.0;
 
 
 let nowShowing = 'Sphere';
+
+let cur_x = 0;
 
 //
 // create shapes and VAOs for objects.
@@ -183,7 +183,8 @@ function drawShapes() {
 
     // set up rotation uniform
     gl.uniform3fv (program.uTheta, new Float32Array(angles));
-    // gl.uniform3fv(program.uTrans, new Float32Array([1, 1, 0]));
+
+    gl.uniform1i(program.ux, cur_x);
     // gl.uniformMatrix4fv (program.uModelT, false, modelMatrix);
 
 
@@ -345,6 +346,7 @@ function initProgram(vertex_id, fragment_id) {
     program.kd = gl.getUniformLocation (program, 'kd');
     program.ks = gl.getUniformLocation (program, 'ks');
     program.ke = gl.getUniformLocation (program, 'ke');
+    program.ux = gl.getUniformLocation (program, 'cur_x');
 
     return program;
 }
